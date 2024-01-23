@@ -2,8 +2,8 @@
 #
 #  This program is free software; you can redistribute it and/or
 #  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
+#  as published by the Free Software Foundation; version 3
+#  of the License.
 #
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -25,7 +25,7 @@ from bpy.types import Operator, Panel, PropertyGroup, WindowManager
 from bpy.props import CollectionProperty, StringProperty, IntProperty
 
 bl_info = {
-    "name": "CodeMap",
+    "name": "Code Map",
     "blender": (2, 80, 0),
     "version": (1, 0, 0),
     "author": "Jithu",
@@ -70,7 +70,7 @@ def unload_icons():
 
 
 class CODE_MAP_OT_jump(Operator):
-    bl_idname = "outliner.jump"
+    bl_idname = "code_map.jump"
     bl_label = "Jump to Line"
 
     line_number: IntProperty()
@@ -85,9 +85,9 @@ class CODE_MAP_OT_jump(Operator):
 
 
 class CODE_MAP_OT_dynamic_toggle(Operator):
-    bl_idname = "outliner.toggle_string"
-    bl_label = "Show Functions"
-    bl_description = "Toggle the display of the function"
+    bl_idname = "code_map.toggle_string"
+    bl_label = "Show functions and properties"
+    bl_description = "Toggle the display of the function and properties"
 
     data_path: StringProperty()
     value: StringProperty()
@@ -125,13 +125,12 @@ class CODE_MAP_PG_properties(PropertyGroup):
 class DrawHelper:
     def draw(self, layout, context, text, wm):
         load_icons()
-        # Draw the search box
+
         layout.prop(wm, "search", text="", icon="VIEWZOOM")
 
         if text is not None:
             class_name = None
             is_class_name = False
-            inside_class = False
 
             # Check if there is a class in the current text block
             has_class = any(line.body.startswith("class ") for line in text.lines)
@@ -140,7 +139,7 @@ class DrawHelper:
                 # Check if the search term is in the line
                 search_in_line = wm.search.lower() in line.body.lower()
 
-                # Check for class and def lines
+                # Check for class and function lines
                 if line.body.startswith("class "):
                     class_name, base_class = self.parse_class_line(line.body)
                     has_methods = self.has_methods(text.lines[i + 1:], class_name)
@@ -149,35 +148,31 @@ class DrawHelper:
                     if self.is_match(wm.search, class_name, line, has_methods):
                         self.draw_class_row(layout, context, text, class_name, base_class,
                                             has_methods, is_class_name, i, wm)
-                        inside_class = True  # Set to True when inside a class
-
-                # Check for functions inside a class
-                elif line.body.startswith("    def ") and is_class_name and search_in_line:
-                    self.draw_class_function_row(layout, text, line.body, i, wm)
-
-                # Check for property lines
-                elif ": " in line.body and is_class_name and not line.body[4].isspace() and search_in_line:
-                    self.draw_property_row(layout, text, line.body, i, wm)
 
                 # Check for constant lines
-                elif " = " in line.body and not line.body.startswith(" ") and search_in_line:
+                elif " = " in line.body and not line.body.startswith(" ") and not 
+                            line.body.startswith("#") and search_in_line:
                     self.draw_variable_row(layout, text, line.body, i, has_class, wm)
 
                 # Check for function lines
                 elif line.body.startswith("def ") and search_in_line:
                     self.draw_function_row(layout, text, line.body, i, has_class, wm)
 
+                # Check for functions inside a class
+                elif line.body.startswith("    def ") and is_class_name and search_in_line:
+                    self.draw_class_function_row(layout, text, line.body, i)
+
+                # Check for property lines
+                elif ": " in line.body and is_class_name and not line.body[4].isspace() and search_in_line:
+                    self.draw_property_row(layout, text, line.body, i)
+
                 # Check for properties and functions inside a class for wm.search
                 elif wm.search.strip():
                     if ": " in line.body and not line.body[4].isspace() and search_in_line:
-                        self.draw_property_row(layout, text, line.body, i, wm)
+                        self.draw_property_row(layout, text, line.body, i)
 
                     elif line.body.startswith("    def ") and search_in_line:
-                        self.draw_class_function_row(layout, text, line.body, i, wm)
-
-                # Reset inside_class when encountering a new class or function
-                elif line.body.startswith("class ") or line.body.startswith("def "):
-                    inside_class = False
+                        self.draw_class_function_row(layout, text, line.body, i)
         else:
             layout.active = False
 
@@ -197,7 +192,7 @@ class DrawHelper:
             if l.body.startswith("class "):
                 break
             if l.body.startswith("    def ") or (
-                    ": " in l.body and l.body.startswith("    ")):
+                    ": " in l.body and not l.body[4].isspace()):
                 return True
         return False
 
@@ -220,52 +215,59 @@ class DrawHelper:
     def draw_variable_row(self, layout, text, line, i, has_class, wm):
         row = layout.row(align=True)
         row.alignment = 'LEFT'
+
         if has_class and not wm.search.strip():
             row.label(text="", icon="BLANK1")
 
+        # Get the first word from the line
         constant = line.split()[0]
         constant = self.truncate_text(constant)
 
-        row.operator("outliner.jump", text=constant, icon_value=custom_icons["variable"].icon_id,
+        row.operator("code_map.jump", text=constant, icon_value=custom_icons["variable"].icon_id,
                      emboss=False).line_number = i + 1
 
 
     def draw_function_row(self, layout, text, line, i, has_class, wm):
         row = layout.row(align=True)
         row.alignment = 'LEFT'
-        if has_class:
+
+        if has_class and not wm.search.strip():
             row.label(text="", icon="BLANK1")
 
         # Get the first word from the line
         function = line.split(' ', 1)[1].split('(')[0]
         function = self.truncate_text(function)
 
-        row.operator("outliner.jump", text=function, icon_value=custom_icons["function"].icon_id,
+        row.operator("code_map.jump", text=function, icon_value=custom_icons["function"].icon_id,
                      emboss=False).line_number = i + 1
 
 
     def draw_class_row(self, layout, context, text, class_name, base_class, has_methods, is_class_name, i, wm):
         row = layout.row(align=True)
         row.alignment = 'LEFT'
-
         sub = row.row()
+
         icon = 'BLANK1' if not has_methods else 'DOWNARROW_HLT' if is_class_name else 'RIGHTARROW'
 
-        prop = sub.operator("outliner.toggle_string", text= "", icon = icon, emboss = False)
+        # Dynamically show an arrow icon for classes with functions,
+        # or a blank icon if the class has no functions
+        prop = sub.operator("code_map.toggle_string", text= "", icon = icon, emboss = False)
         prop.data_path = "window_manager.show_def_lines"
         prop.value = class_name
 
-        row.operator("outliner.jump", text=class_name, icon_value=custom_icons["class"].icon_id,
+        if wm.search.strip():
+            sub.enabled = False
+
+        row.operator("code_map.jump", text=class_name, icon_value=custom_icons["class"].icon_id,
                      emboss=False).line_number = i + 1
 
 
-    def draw_property_row(self, layout, text, line, i, wm):
-        # Check if the line contains quotes
+    def draw_property_row(self, layout, text, line, i):
         properties = [
             "BoolProperty", "BoolVectorProperty", "CollectionProperty",
             "EnumProperty", "FloatProperty", "FloatVectorProperty",
             "IntProperty", "IntVectorProperty", "PointerProperty",
-            "StringProperty"
+            "RemoveProperty", "StringProperty"
         ]
 
         if any(keyword in line for keyword in properties):
@@ -273,22 +275,24 @@ class DrawHelper:
             row.alignment = 'LEFT'
             row.label(text=self.get_indentation(bpy.app.version))
 
+            # Get the first word from the line
             variable = line.split()[0].split(':')[0]
             variable = self.truncate_text(variable)
 
-            row.operator("outliner.jump", text=variable, icon_value=custom_icons["property"].icon_id,
+            row.operator("code_map.jump", text=variable, icon_value=custom_icons["property"].icon_id,
                          emboss=False).line_number = i + 1
 
 
-    def draw_class_function_row(self, layout, text, line, i, wm):
+    def draw_class_function_row(self, layout, text, line, i):
         row = layout.row(align=True)
         row.alignment = 'LEFT'
         row.label(text=self.get_indentation(bpy.app.version))
 
+        # Get the second word from the line
         method = line.split(' ', 1)[1].split('(')[0].replace("def ", "").strip()
         method = self.truncate_text(method)
 
-        row.operator("outliner.jump", text=method, icon_value=custom_icons["function"].icon_id,
+        row.operator("code_map.jump", text=method, icon_value=custom_icons["function"].icon_id,
                      emboss=False).line_number = i + 1
 
 
@@ -296,8 +300,8 @@ class DrawHelper:
 
 
 class CODE_MAP_OT_popup(Operator):
-    bl_idname = "outliner.popup"
-    bl_label = "CodeMap"
+    bl_idname = "code_map.popup"
+    bl_label = "Code Map"
 
     def execute(self, context):
         return {'FINISHED'}
@@ -307,7 +311,7 @@ class CODE_MAP_OT_popup(Operator):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="CodeMap", icon="WORDWRAP_ON")
+        layout.label(text="Code Map", icon="WORDWRAP_ON")
 
         text = bpy.context.space_data.text
         wm = context.window_manager
@@ -318,10 +322,10 @@ class CODE_MAP_OT_popup(Operator):
 
 class CODE_MAP_PT_panel(Panel):
     bl_idname = "CODE_MAP_PT_panel"
-    bl_label = "CodeMap"
+    bl_label = "Code Map"
     bl_space_type = 'TEXT_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Outliner"
+    bl_category = "Code Map"
 
     def draw(self, context):
         layout = self.layout
@@ -370,6 +374,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
     del WindowManager.show_def_lines
+    del WindowManager.search
 
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
