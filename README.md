@@ -1,4 +1,4 @@
-# CodeMap
+# Code Map
 
 CodeMap is an addon for Blender, inspired by the functionality of [Pistiwique Pie Text Editor](https://github.com/pistiwique/pistiwique_pie_text_editor) addon, which has not been updated since Blender 2.79. While CodeMap is not a fork and is entirely different in its implementation, it maintains a similar user interface for familiarity.
 
