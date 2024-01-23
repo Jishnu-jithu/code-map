@@ -4,6 +4,8 @@ CodeMap is an addon for Blender, inspired by the functionality of [Pistiwique Pi
 
 This addon enhances your coding experience in Blender by providing a navigational interface for your code. It allows you to easily traverse through classes, methods, and functions, making your coding workflow smoother and more efficient.
 
+![Preview](gif/code_map.gif)
+
 ## Popup
 CodeMap includes a popup with the same features as the panel. The popup can be opened using the `` ` `` (backtick) shortcut key. This provides users with an alternative way to access the addon's functionality, offering flexibility based on individual preferences.
 
